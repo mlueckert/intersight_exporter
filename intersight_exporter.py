@@ -6,7 +6,7 @@ This script will export device metrics of Cisco UCS Blades and Profiles from the
 The format of the exported metrics can be used in Prometheus.
 This script is well suited to be called from exporter_exporter.
 
-Last Change: 22.05.2024 M. Lueckert
+Last Change: 29.05.2024 M. Lueckert
 
 """
 
@@ -313,6 +313,16 @@ def get_compute_blade_metrics(
                         map_string_value_to_int(health_metric_dict["health"]),
                     ]
                 )
+                power_state_metric_dict = {
+                    "power_state": get_value_from_path(result, "oper_power_state")
+                }
+                blade_metrics_list.append(
+                    [
+                        "ucsx_compute_blade_power_state",
+                        {**power_state_metric_dict, **all_labels_dict},
+                        map_string_value_to_int(power_state_metric_dict["power_state"]),
+                    ]
+                )
                 break
     return blade_metrics_list
 
@@ -373,9 +383,9 @@ def map_string_value_to_int(metric_value: str):
     Returns:
         Mapped int for the value defined
     """
-    if metric_value in ["healthy", "cleared", "complete", "inprogress", "none"]:
+    if metric_value in ["healthy", "cleared", "complete", "inprogress", "none", "on"]:
         return 0
-    elif metric_value in ["disconnected", "true", "warning", "notstarted"]:
+    elif metric_value in ["disconnected", "true", "warning", "notstarted", "off"]:
         return 1
     elif metric_value in ["critical", "failed"]:
         return 2
