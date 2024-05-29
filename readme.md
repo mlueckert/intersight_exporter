@@ -11,6 +11,7 @@ This script exports device metrics of Cisco UCS Blades and Profiles from the Cis
 - [Metrics](#metrics)
 - [Logging](#logging)
 - [Error Handling](#error-handling)
+- [Metric Examples](#metric-examples)
 
 ## Requirements
 
@@ -78,6 +79,19 @@ If an error occurs during execution, the script will log the exception details a
 ```
 
 This command runs the exporter with detailed debug logs, using the provided API key and secret file.
+
+## Metric Examples
+
+```text
+ucsx_alarms{code="adapterhostfcinterfacedown", severity="critical", affected_mo_display_name="asdf/chassis-1/server-5/adapter-ucsx-ml-v5d200g_asdf/vsi-a", description="vhba asdf/chassis-1/server-5/adapter-ucsx-ml-v5d200g_asdf/vsi-a is not operational.", hostname="asdf"} 2
+ucsx_chassis_info{model="ucsx-9508", serial="asdf", hostname="asdf", name="asdf-1", moid="asdf"} 1
+ucsx_chassis_health{health="healthy", hostname="asdf", name="asdf-11", moid="asdf"} 0
+ucsx_compute_blade_info{serial="asdf", total_memory="8388608", model="UCSX-410C-M7", num_cpus="4", hostname="asdf", moid="asdf"} 1
+ucsx_compute_blade_health{health="healthy", hostname="asdf", moid="asdf"} 0
+ucsx_compute_blade_power_state{power_state="on", hostname="asdf", moid="asdf"} 0
+ucsx_server_profile_deploy_status{assigned_server_moid="False", hostname="asdf", moid="asdf", deploy_status="none"} 0
+ucsx_server_profile_info{assigned_server_moid="False", hostname="asdf", moid="asdf"} 1
+```
 
 ## Author
 
