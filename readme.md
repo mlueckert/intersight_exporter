@@ -59,6 +59,7 @@ The script retrieves various metrics from the Cisco Intersight API and formats t
 - Conditional alarms
 - Server profile information and deployment status
 - Compute blade information and health
+- API Key Metrics
 
 The metrics are printed to `stdout` in a format that Prometheus can scrape.
 
@@ -91,6 +92,9 @@ ucsx_compute_blade_health{health="healthy", hostname="asdf", moid="asdf"} 0
 ucsx_compute_blade_power_state{power_state="on", hostname="asdf", moid="asdf"} 0
 ucsx_server_profile_deploy_status{assigned_server_moid="False", hostname="asdf", moid="asdf", deploy_status="none"} 0
 ucsx_server_profile_info{assigned_server_moid="False", hostname="asdf", moid="asdf"} 1
+ucsx_api_key_oper_status{api_key_oper_status="enabled", purpose="monitoring", moid="asdf", account_moid="asdf"} 0
+ucsx_api_key_remaining_days{purpose="monitoring", moid="asdf", account_moid="asdf", is_never_expiring="false", start_time="2024-05-15 09:20:12", expiry_date_time="2024-11-05 10:29:00+00:00"} 111
+intersight_exporter_status 1
 ```
 
 ## Author
