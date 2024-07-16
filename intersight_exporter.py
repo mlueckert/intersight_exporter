@@ -285,19 +285,32 @@ def get_api_key_metrics(api_client: intersight.api_client) -> list:
     for result in response.results:
         all_labels_dict = {
             "purpose": get_value_from_path(result, "purpose"),
+            "moid": get_value_from_path(result, "moid"),
+            "account_moid": get_value_from_path(result, "account_moid"),
+        }
+        details_labels_dict = {
+            "is_never_expiring": get_value_from_path(result, "is_never_expiring"),
             "start_time": parse_date_string(get_value_from_path(result, "start_time")),
             "expiry_date_time": get_value_from_path(result, "expiry_date_time"),
-            "moid": get_value_from_path(result, "moid"),
-            "is_never_expiring": get_value_from_path(result, "is_never_expiring"),
         }
         apikeystatus_dict = {
             "api_key_oper_status": get_value_from_path(result, "oper_status"),
         }
         metrics_list.append(
             [
-                "ucsx_api_key_info",
+                "ucsx_api_key_oper_status",
                 {**apikeystatus_dict, **all_labels_dict},
                 map_string_value_to_int(apikeystatus_dict["api_key_oper_status"]),
+            ]
+        )
+        metrics_list.append(
+            [
+                "ucsx_api_key_remaining_days",
+                {**all_labels_dict, **details_labels_dict},
+                (
+                    parser.parse(details_labels_dict["expiry_date_time"], ignoretz=True)
+                    - datetime.datetime.now()
+                ).days,
             ]
         )
     return metrics_list
@@ -484,6 +497,7 @@ def map_string_value_to_int(metric_value: str):
     else:
         return metric_value
 
+
 def format_time(dt):
     """
     Formats a datetime object as an ISO-8601 string suitable for use with Intersight API queries.
@@ -496,6 +510,7 @@ def format_time(dt):
     """
     s = dt.strftime("%Y-%m-%dT%H:%M:%S.%f")
     return f"{s[:-3]}Z"
+
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))
