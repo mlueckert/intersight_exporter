@@ -291,7 +291,7 @@ def get_api_key_metrics(api_client: intersight.api_client) -> list:
         details_labels_dict = {
             "is_never_expiring": get_value_from_path(result, "is_never_expiring"),
             "start_time": parse_date_string(get_value_from_path(result, "start_time")),
-            "expiry_date_time": get_value_from_path(result, "expiry_date_time"),
+            "expiry_date_time": parse_date_string(get_value_from_path(result, "expiry_date_time")),
         }
         apikeystatus_dict = {
             "api_key_oper_status": get_value_from_path(result, "oper_status"),
