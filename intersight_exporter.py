@@ -6,7 +6,7 @@ This script will export device metrics of Cisco UCS Blades and Profiles from the
 The format of the exported metrics can be used in Prometheus.
 This script is well suited to be called from exporter_exporter.
 
-Last Change: 04.06.2024 M. Lueckert
+Last Change: 16.07.2024 M. Lueckert
 
 """
 
@@ -14,10 +14,14 @@ Last Change: 04.06.2024 M. Lueckert
 # https://www.cisco.com/c/en/us/td/docs/unified_computing/Intersight/IMM_Alarms_Guide/b_cisco_intersight_alarms_reference_guide/m_intersight_server_alarms.html
 
 import argparse
+import datetime
 import logging
 from logging.handlers import RotatingFileHandler
+import re
 import sys
-from intersight.api import server_api, compute_api, cond_api, equipment_api
+from dateutil import parser
+from intersight.api import server_api, compute_api, cond_api, equipment_api, iam_api
+import intersight.api
 import intersight.api_client
 import urllib3
 
@@ -84,35 +88,56 @@ def main(arguments):
         else:
             verify_ssl = True
 
-        # API Key v2 format
-        signing_algorithm = intersight.signing.ALGORITHM_RSASSA_PKCS1v15
-        signing_scheme = intersight.signing.SCHEME_RSA_SHA256
-        hash_algorithm = intersight.signing.HASH_SHA256
+        with open(api_secret_file, "r") as file:
+            private_key = file.read()
+        regex = re.compile(r"\s*-----BEGIN (.*)-----\s+")
+        match = regex.match(private_key)
+        if not match:
+            raise ValueError("API key file does not have a valid PEM pre boundary")
+        pem_header = match.group(1)
+        # HTTP signature scheme.
+        if pem_header == "RSA PRIVATE KEY":
+            signing_scheme = intersight.signing.SCHEME_RSA_SHA256
+            signing_algorithm = intersight.signing.ALGORITHM_RSASSA_PKCS1v15
+        elif pem_header == "EC PRIVATE KEY":
+            signing_scheme = intersight.signing.SCHEME_HS2019
+            signing_algorithm = intersight.signing.ALGORITHM_ECDSA_MODE_FIPS_186_3
+        else:
+            raise Exception("Unsupported key: {0}".format(pem_header))
 
         configuration = intersight.Configuration(
             host=baseurl,
-            signing_info=intersight.signing.HttpSigningConfiguration(
+            signing_info=intersight.HttpSigningConfiguration(
                 key_id=api_key_id,
                 private_key_path=api_secret_file,
                 signing_scheme=signing_scheme,
                 signing_algorithm=signing_algorithm,
-                hash_algorithm=hash_algorithm,
+                hash_algorithm=intersight.signing.HASH_SHA256,
                 signed_headers=[
                     intersight.signing.HEADER_REQUEST_TARGET,
+                    intersight.signing.HEADER_CREATED,
+                    intersight.signing.HEADER_EXPIRES,
                     intersight.signing.HEADER_HOST,
                     intersight.signing.HEADER_DATE,
                     intersight.signing.HEADER_DIGEST,
                 ],
+                signature_max_validity=datetime.timedelta(minutes=5),
             ),
         )
         configuration.verify_ssl = verify_ssl
         api_client = intersight.ApiClient(configuration)
         chassis_metrics = get_chassis_metrics(api_client)
+        api_key_metrics = get_api_key_metrics(api_client)
         server_profile_metrics = get_server_profile_metrics(api_client, [])
         compute_blade_metrics = get_compute_blade_metrics(
             api_client, server_profile_metrics
         )
-        all_metrics = server_profile_metrics + compute_blade_metrics + chassis_metrics
+        all_metrics = (
+            server_profile_metrics
+            + compute_blade_metrics
+            + chassis_metrics
+            + api_key_metrics
+        )
         alarm_metrics = get_cond_alarm_metrics(
             api_client, include_acknowledged_alarms, all_metrics
         )
@@ -226,6 +251,56 @@ def get_cond_alarm_metrics(
             ]
         )
     return alarm_metrics_list
+
+
+def parse_date_string(date_string) -> str:
+    """
+    Parses a date string and converts it to a formatted date-time string.
+
+    Parameters:
+    date_string (str): The date string to be parsed.
+
+    Returns:
+    str: The formatted date-time string in the format "YYYY-MM-DD HH:MM:SS".
+    """
+    return parser.parse(date_string, ignoretz=True).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def get_api_key_metrics(api_client: intersight.api_client) -> list:
+    """
+    Fetches API key metrics from Intersight and processes the data into a list of metrics.
+
+    Parameters:
+    api_client (intersight.api_client): An instance of the Intersight API client.
+
+    Returns:
+    List: A list of metrics where each metric is represented as a list containing:
+          - A string identifier for the metric.
+          - A dictionary of labels and their values.
+          - An integer value mapped from the API key's operational status.
+    """
+    api_instance = iam_api.IamApi(api_client)
+    response = api_instance.get_iam_api_key_list()
+    metrics_list = []
+    for result in response.results:
+        all_labels_dict = {
+            "purpose": get_value_from_path(result, "purpose"),
+            "start_time": parse_date_string(get_value_from_path(result, "start_time")),
+            "expiry_date_time": get_value_from_path(result, "expiry_date_time"),
+            "moid": get_value_from_path(result, "moid"),
+            "is_never_expiring": get_value_from_path(result, "is_never_expiring"),
+        }
+        apikeystatus_dict = {
+            "api_key_oper_status": get_value_from_path(result, "oper_status"),
+        }
+        metrics_list.append(
+            [
+                "ucsx_api_key_info",
+                {**apikeystatus_dict, **all_labels_dict},
+                map_string_value_to_int(apikeystatus_dict["api_key_oper_status"]),
+            ]
+        )
+    return metrics_list
 
 
 def get_server_profile_metrics(
@@ -383,11 +458,26 @@ def map_string_value_to_int(metric_value: str):
     Returns:
         Mapped int for the value defined
     """
-    if metric_value in ["healthy", "cleared", "complete", "inprogress", "none", "on"]:
+    if metric_value in [
+        "healthy",
+        "cleared",
+        "complete",
+        "inprogress",
+        "none",
+        "on",
+        "enabled",
+    ]:
         return 0
-    elif metric_value in ["disconnected", "true", "warning", "notstarted", "off", "partial"]:
+    elif metric_value in [
+        "disconnected",
+        "true",
+        "warning",
+        "notstarted",
+        "off",
+        "partial",
+    ]:
         return 1
-    elif metric_value in ["critical", "failed"]:
+    elif metric_value in ["critical", "failed", "disabled", "expired"]:
         return 2
     elif metric_value in ["restarting"]:
         return 3
