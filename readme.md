@@ -1,6 +1,6 @@
 # Intersight API Prometheus Exporter
 
-This script exports device metrics of Cisco UCS Blades and Profiles from the Cisco Intersight API. The format of the exported metrics is compatible with Prometheus. This script is well suited to be called from `exporter_exporter`.
+This script exports device metrics of Cisco UCS blades, rack units, and profiles from the Cisco Intersight API. The format of the exported metrics is compatible with Prometheus. This script is well suited to be called from `exporter_exporter`.
 
 ## Table of Contents
 
@@ -59,6 +59,7 @@ The script retrieves various metrics from the Cisco Intersight API and formats t
 - Conditional alarms
 - Server profile information and deployment status
 - Compute blade information and health
+- Compute rack unit information and health
 - API Key Metrics
 
 The metrics are printed to `stdout` in a format that Prometheus can scrape.
@@ -90,6 +91,9 @@ ucsx_chassis_health{health="healthy", hostname="asdf", name="asdf-11", moid="asd
 ucsx_compute_blade_info{serial="asdf", total_memory="8388608", model="UCSX-410C-M7", num_cpus="4", hostname="asdf", moid="asdf"} 1
 ucsx_compute_blade_health{health="healthy", hostname="asdf", moid="asdf"} 0
 ucsx_compute_blade_power_state{power_state="on", hostname="asdf", moid="asdf"} 0
+ucsx_compute_rack_unit_info{serial="asdf", total_memory="1048576", model="UCSC-C240-M6SX", num_cpus="2", hostname="asdf", moid="asdf"} 1
+ucsx_compute_rack_unit_health{health="healthy", hostname="asdf", moid="asdf"} 0
+ucsx_compute_rack_unit_power_state{power_state="on", hostname="asdf", moid="asdf"} 0
 ucsx_server_profile_deploy_status{assigned_server_moid="False", hostname="asdf", moid="asdf", deploy_status="none"} 0
 ucsx_server_profile_info{assigned_server_moid="False", hostname="asdf", moid="asdf"} 1
 ucsx_api_key_oper_status{api_key_oper_status="enabled", purpose="monitoring", moid="asdf", account_moid="asdf"} 0

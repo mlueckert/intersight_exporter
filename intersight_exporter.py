@@ -6,7 +6,7 @@ This script will export device metrics of Cisco UCS Blades and Profiles from the
 The format of the exported metrics can be used in Prometheus.
 This script is well suited to be called from exporter_exporter.
 
-Last Change: 16.07.2024 M. Lueckert
+Last Change: 10.06.2026 M. Lueckert
 
 """
 
@@ -132,9 +132,13 @@ def main(arguments):
         compute_blade_metrics = get_compute_blade_metrics(
             api_client, server_profile_metrics
         )
+        compute_rack_unit_metrics = get_compute_rack_unit_metrics(
+            api_client, server_profile_metrics
+        )
         all_metrics = (
             server_profile_metrics
             + compute_blade_metrics
+            + compute_rack_unit_metrics
             + chassis_metrics
             + api_key_metrics
         )
@@ -217,9 +221,9 @@ def get_cond_alarm_metrics(
     Returns:
     list: A list of alarm metrics including alarm details and severity mapped to integers.
     """
-    query_filter = f"Severity eq Critical"
+    query_filter = "Severity eq Critical or Severity eq Warning"
     if not include_acknowledged_alarms:
-        query_filter = query_filter + " and Acknowledge eq None"
+        query_filter = "(" + query_filter + ") and Acknowledge eq None"
     api_instance = cond_api.CondApi(api_client)
     response = api_instance.get_cond_alarm_list(filter=query_filter)
     alarm_metrics_list = []
@@ -413,6 +417,68 @@ def get_compute_blade_metrics(
                 )
                 break
     return blade_metrics_list
+
+
+def get_compute_rack_unit_metrics(
+    api_client: intersight.api_client, profiles_metrics_list
+) -> list:
+    """
+    Retrieves and processes compute rack unit metrics to be formatted for Prometheus.
+
+    Args:
+    api_client (intersight.ApiClient): The client object for connecting to the Intersight API.
+    profiles_metrics_list (list): A list containing metrics related to server profiles.
+
+    Returns:
+    list: A list of compute rack unit metrics including hardware health and other details.
+    """
+    api_instance = compute_api.ComputeApi(api_client)
+    response = api_instance.get_compute_rack_unit_list()
+    rack_unit_metrics_list = []
+    for result in response.results:
+        hostname = get_value_from_path(result, "name").upper()
+        for metric in profiles_metrics_list:
+            if metric[1]["assigned_server_moid"] == result["moid"]:
+                hostname = metric[1]["hostname"]
+                break
+        all_labels_dict = {
+            "hostname": hostname,
+            "moid": get_value_from_path(result, "moid"),
+        }
+        details_labels_dict = {
+            "serial": get_value_from_path(result, "serial"),
+            "total_memory": get_value_from_path(result, "total_memory"),
+            "model": get_value_from_path(result, "model"),
+            "num_cpus": get_value_from_path(result, "num_cpus"),
+        }
+        rack_unit_metrics_list.append(
+            [
+                "ucsx_compute_rack_unit_info",
+                {**details_labels_dict, **all_labels_dict},
+                1,
+            ]
+        )
+        health_metric_dict = {
+            "health": get_value_from_path(result, "alarm_summary.health")
+        }
+        rack_unit_metrics_list.append(
+            [
+                "ucsx_compute_rack_unit_health",
+                {**health_metric_dict, **all_labels_dict},
+                map_string_value_to_int(health_metric_dict["health"]),
+            ]
+        )
+        power_state_metric_dict = {
+            "power_state": get_value_from_path(result, "oper_power_state")
+        }
+        rack_unit_metrics_list.append(
+            [
+                "ucsx_compute_rack_unit_power_state",
+                {**power_state_metric_dict, **all_labels_dict},
+                map_string_value_to_int(power_state_metric_dict["power_state"]),
+            ]
+        )
+    return rack_unit_metrics_list
 
 
 def format_metric(metric_name: str, labeldict: dict, value: str) -> str:
